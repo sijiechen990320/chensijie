@@ -1,0 +1,278 @@
+from sklearn.datasets import load_iris
+import numpy as np
+import math
+from collections import Counter
+
+#CART
+
+class decisionnode:
+    def _init(self,d=None,thre=None,results=None,NH=None,lb=None,rb=None,max_label=None):
+        self.d=d #维度
+        self.thre=thre #二分法时的比较值 将样本集分为2类
+        self.results=results #最后的叶结点代表的类别
+        self.NH=NH #各节点的样本量和经验熵的乘积 用于剪枝
+        self.lb=lb #决策的结点 样本在d维的数据小于thre时 当前结点的子树上的结点
+        self.rb=rb #决策的结点 样本在d维的数据大于thre时 当前结点的子数上的结点8
+        self.max_label=max_label #记录当前结点包含的label中同类最多的label
+
+def entropy(y):
+    #计算信息熵 y是labels
+    #首先把所有labels加进category 并去重排序
+    if y.size>1:
+
+        category=list(set(y))
+    else:
+
+        category=[y.item()]
+        y=[y.item()] #以列表返回数组
+
+    ent=0
+
+    for label in category:
+        p=len([label_ for label_ in y if label_ == label])/len(y)  #求出现次数的新语法
+        ent+=-p*math.log(p,2)
+
+    return ent
+
+
+def Gini(y):
+    #基尼值越小说明纯度越高
+    category=list(set(y))
+    gini=1
+
+    for label in category:
+        p=len([label_ for label_ in y if label_==label])/len(y)
+        gini+=-p*p
+
+    return gini
+
+#分别基于基尼指数 信息熵 得到两个thre
+def GainEnt_max(X,y,d):
+    #计算某种选择时得最大信息增益 X为样本集 y为label d为一个维度 type为int
+    ent_X=entropy(y)
+    X_attr=X[:,d]
+    X_attr=list(set(X_attr))
+    X_attr=sorted(X_attr) #按升序排
+    Gain=0
+    thre=0
+
+    #确定某一特征后找出分裂点值 取属性内相邻两个取值的平均值(x,x,x)作为阈值进行二分类
+    #计算不同阈值下的基尼指数 选择最佳阈值
+    for i in range(len(X_attr)-1):
+        thre_temp=(X_attr[i]+X_attr[i+1])/2
+        y_small_index=[i_arg for i_arg in range(
+            len(X[:,d])) if X[i_arg,d] <= thre_temp]
+        #相当于分类器 小的分到左结点
+        y_big_index=[i_arg for i_arg in range(
+            len(X[:,d])) if X[i_arg,d] > thre_temp]
+        #大的分到右边的结点
+        y_small=y[y_small_index]
+        y_big=y[y_big_index]
+
+        #算出某时刻增益熵
+        Gain_temp=ent_X-(len(y_small)/len(y))*\
+                  entropy(y_small)-(len(y_big)/len(y))*entropy(y_big)
+
+        if Gain<Gain_temp:
+            Gain=Gain_temp
+            thre=thre_temp
+    return Gain,thre
+
+def Gini_index_min(X,y,d):
+    #计算选择属性的最小基尼指数 X样本集 ylabel d为维度 type为int
+
+    X=X.reshape(-1,len(X.T)) #改变维度为1行len列 此时X为矩阵
+    X_attr=X[:,d]
+    X_attr=list(set(X_attr))
+    X_attr=sorted(X_attr)
+    Gini_index=1
+    thre=0
+
+    for i in range(len(X_attr)-1):
+        thre_temp=(X_attr[i]+X_attr[i+1])/2
+        y_small_index=[i_arg for i_arg in range(
+            len(X[:,d])) if X[i_arg,d]<=thre_temp]
+        y_big_index=[i_arg for i_arg in range(
+            len(X[:,d])) if X[i_arg,d]>thre_temp]
+        y_small=y[y_small_index]
+        y_big=y[y_big_index]
+
+        Gini_index_temp=(len(y_small)/len(y))*\
+            Gini(y_small)+(len(y_big)/len(y))*Gini(y_big)
+        if Gini_index>Gini_index_temp:
+            Gini_index=Gini_index_temp
+            thre=thre_temp
+    return Gini_index,thre
+
+def attribute_based_on_GainEnt(X,y):
+    #基于信息增益选择最优属性
+    D=np.arange(len(X[0]))
+    Gain_max=0
+    thre_=0
+    d_=0
+    for d in D:
+        Gain,thre=GainEnt_max(X,y,d)
+        if Gain_max<Gain:
+            Gain_max=Gain
+            thre_=thre
+            d_=d
+
+    return Gain_max,thre_,d_
+
+def attribute_based_on_Giniindex(X,y):
+    D=np.arange(len(X.T))
+    Gini_Index_Min=1
+    thre_=0
+    d_=0
+    for d in D:
+        Gini_index,thre=Gini_index_min(X,y,d)
+        if Gini_Index_Min>Gini_index:
+            Gini_Index_Min=Gini_index
+            thre_=thre
+            d_=d
+
+    return Gini_Index_Min,thre_,d_
+
+def devide_group(X,y,thre,d):
+    #在维度d下阈值为thre分两类并返回
+    X_in_d=X[:,d]
+    x_small_index=[i_arg for i_arg in range(
+        len(X[:,d])) if X[i_arg,d]<=thre]
+    x_big_index=[i_arg for i_arg in range(
+        len(X[:,d])) if X[i_arg,d]>thre]
+
+    X_small=X[x_small_index]
+    y_small=y[x_small_index]
+    X_big=X[x_big_index]
+    y_big=y[x_big_index]
+    return X_small,y_small,X_big,y_big
+
+def NtHt(y):
+    #计算经验熵和样本数的乘积 用于剪枝
+    ent=entropy(y)
+    print(ent,len(y),ent*len(y))
+    return ent*len(y)
+
+def maxlabel(y):
+    label_=Counter(y).most_common(1) #列出个数最多的参数名
+    return label_[0][0]
+
+def buildtree(X,y,method='Gini'):
+    #递归构建决策树
+    #任选一种方法计算其结果
+    if y.size>1:
+        if method=='Gini':
+            Gain_max,thre,d=attribute_based_on_Giniindex(X,y)
+        elif method=='GainEnt':
+            Gain_max,thre,d=attribute_based_on_GainEnt(X,y)
+        if (Gain_max>0 and method=='GainEnt')or(Gain_max>=0 and len(list(set(y)))>1 and method=='Gini'):
+            X_small,y_small,X_big,y_big=devide_group(X,y,thre,d)
+            left_branch=buildtree(X_small,y_small,method=method)
+            right_branch=buildtree(X_small,y_small,method=method)
+            nh = NtHt(y)
+            max_label = maxlabel(y)
+            return decisionnode(d=d,thre=thre,NH=nh,lb=left_branch,rb=right_branch,max_label=max_label)
+        else:
+            nh=NtHt(y)
+            max_label=maxlabel(y)
+            return decisionnode(results=y[0],NH=nh,max_label=max_label)
+    else:
+        nh = NtHt(y)
+        max_label = maxlabel(y)
+        return decisionnode(results=y.item(), NH=nh, max_label=max_label)
+#
+def printtree(tree,indent='-',dict_tree={},direct='L'):
+    #剪枝通过极小化决策树整体的损失函数体现
+    #由树的叶节点向上回缩 如果将某一个父节点所有叶节点合并使损失函数减小 则进行剪枝 将父节点变成新的叶结点
+    if tree.results!=None:
+        print(tree.results)
+
+        dict_tree={direct:str(tree.results)}
+
+    else:
+        #打印判断条件
+        print(str(tree.d)+":"+str(tree.thre)+"?")
+        #打印分支
+        print(indent+"L->",)
+
+        a=printtree(tree.lb,indent=indent+"-",direct='l')
+        aa=a.copy()
+        print(indent+"R->",)
+
+        b=printtree(tree.rb,indent=indent+"-",direct='R')
+        bb=b.copy()
+        aa.update(bb)
+        stri=str(tree.d)+":"+str(tree.thre)+"?"
+        if indent !='-':
+            dict_tree={direct:{stri:aa}}
+        else:
+            dict_tree={stri:aa}
+
+    return dict_tree
+
+def classify(observation,tree):
+    if tree.results!=None:
+        return tree.results
+    else:
+        v=observation[tree.d]
+        branch=None
+
+        if v>tree.thre:
+            branch=tree.rb
+        else:
+            branch=tree.lb
+
+        return classify(observation,branch)
+
+def pruning(tree,mingain=0.1):
+    #如果分页不是叶节点 则对其进行剪枝
+    if tree.lb.results==None:
+        pruning(tree.lb,mingain)
+    if tree.rb.results==None:
+        pruning(tree.rb,mingain)
+
+    #如果两个子分支都是叶结点，判断能否合并
+    if tree.lb.results!=None and tree.rb.results!=None:
+        before_pruning=tree.lb.NH+tree.rb.NH+2*mingain
+        after_pruning=tree.NH+mingain
+        print('before_pruning={},after_pruning={}'.format(
+            before_pruning,after_pruning))
+        if after_pruning<=before_pruning:
+            print('pruning--{}:{}?'.format(
+                tree.d,tree.thre))
+            tree.lb,tree.rb=None,None
+            tree.results=tree.max_label
+
+if __name__=='__main__':
+    iris=load_iris()
+    X=iris.data
+    y=iris.target
+
+    permutation=np.random.permutation(X.shape[0])
+    shuffled_dataset=X[permutation,:]
+    shuffled_labels=y[permutation]
+
+    train_data=shuffled_dataset[:100,:]
+    train_label=shuffled_labels[:100]
+
+    test_data=shuffled_dataset[100:150,:]
+    test_label=shuffled_labels[100:150]
+
+    tree1=buildtree(train_data,train_label,method='Gini')
+    tree2=buildtree(train_data,train_label,method='GainEnt')
+
+    a=printtree(tree=tree1)
+    b=printtree(tree=tree2)
+
+    true_count=0
+    for i in range(len(test_label)):
+        predict=classify(test_data[i],tree1)
+        if predict==test_label[i]:
+            true_count+=1
+    print("CARTTree:{}".format(true_count))
+    true_count=0
+    for i in range(len(test_label)):
+        predict = classify(test_data[i], tree2)
+        if predict == test_label[i]:
+            true_count += 1
+    print("C3Tree:{}".format(true_count))
