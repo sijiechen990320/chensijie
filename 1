@@ -1,0 +1,98 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+#1
+def _is_letter(_str):
+    if len(_str)>0:
+        return '0.0'
+    return _str
+csv_array = np.loadtxt('4.csv',
+                       dtype=str,
+                       delimiter=',',
+                       converters={10:_is_letter}
+                       )
+
+matrix=np.array(csv_array,dtype='float_')
+print(matrix)
+np.mean(matrix)
+now2=np.mat(matrix)
+print(np.mean(now2,0))
+
+#2
+
+class CCovMat(object):
+    def __init__(self, samples):
+        self.samples = samples
+        self.covmat = []
+        self._calc_covmat()
+
+    def _covariance(self, X, Y):
+        n = np.shape(X)[0]
+        X, Y = np.array(X), np.array(Y)
+        meanX, meanY = np.mean(X), np.mean(Y)
+        cov = sum(np.multiply(X - meanX, Y - meanY)) / (n - 1)
+        return cov
+
+    def _calc_covmat(self):
+        S = self.samples
+        ns = np.shape(S)[0]
+        mean = np.array([np.mean(attr) for attr in S.T])
+        centrS = S - mean
+        print('样本集中心化得到的', centrS)
+        self.covmat = np.dot(centrS.T, centrS) / (ns - 1)
+        return self.covmat
+
+    def CovMat(self):
+        return self.covmat
+
+
+if __name__ == '__main__':
+    samples=matrix
+    cm=CCovMat(samples)
+    print(cm.CovMat())
+
+# 4
+x=matrix[:,0]
+y=matrix[:,1]
+x_=x-np.mean(x)
+y_=y-np.mean(y)
+print(x_,y_)
+d1=np.dot(x_,y_)/(np.linalg.norm(x_)*np.linalg.norm(y_))
+print(d1)
+
+#5
+attribute1=matrix[:,0]
+norm_mean=np.mean(attribute1)
+norm_std=np.std(attribute1,ddof=1)
+def normdis(x,mu,sigma):
+    pdf=np.exp(-((x-mu)**2)/(2*sigma**2))/(sigma*np.sqrt(2*np.pi))
+    return pdf
+x=np.arange(5,180,1)
+y=normdis(x,norm_mean,norm_std)
+plt.plot(x,y)
+plt.xlim(0,180)
+plt.hist(attribute1,bins=50,rwidth=0.9,density=True)
+plt.title('NormalDistribution')
+plt.xlabel('Attribute')
+plt.ylabel('Probability')
+plt.show()
+
+#6
+norm_var={}
+for i in range(11):
+    norm_var[i] = np.var(matrix[:,i])
+    print(norm_var[i])
+
+#7
+mat=np.cov(matrix,rowvar=False)
+print(mat)
+def _find_index():
+    mat_max=mat[0][0]
+    for i in range(11):
+        for j in range(11):
+            if mat[i][j] > mat_max:
+                mat_max = mat[i][j]
+    print(i,j)
+
+_find_index()
+
